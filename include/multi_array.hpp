@@ -223,6 +223,7 @@ struct access_ref{
         access_ref<marray, codim + 1, dim - 1> ret;
         std::copy(indices.begin(), indices.end(), ret.indices.begin());
         ret.indices.back() = index;
+        ret.accessor = accessor;
         return ret;
     }
 };
@@ -230,6 +231,35 @@ template<typename marray, size_t codim>
 struct access_ref<marray ,codim, 1>{
     marray* accessor;
     std::array<size_t, codim> indices;
+    marray::value_type& operator[](size_t index){
+        std::array<size_t, codim + 1> accindices;
+        std::copy(indices.begin(), indices.end(), accindices.begin());
+        accindices.back() = index;
+        return accessor->access_by_array(accindices);
+    }
+};
+template<typename marray, size_t codim, size_t dim>
+struct const_access_ref{
+    const marray* accessor;
+    std::array<size_t, codim> indices;
+    const_access_ref<marray, codim + 1, dim - 1> operator[](size_t index){
+        const_access_ref<marray, codim + 1, dim - 1> ret;
+        std::copy(indices.begin(), indices.end(), ret.indices.begin());
+        ret.indices.back() = index;
+        ret.accessor = accessor;
+        return ret;
+    }
+};
+template<typename marray, size_t codim>
+struct const_access_ref<marray ,codim, 1>{
+    const marray* accessor;
+    std::array<size_t, codim> indices;
+    const marray::value_type& operator[](size_t index){
+        std::array<size_t, codim + 1> accindices;
+        std::copy(indices.begin(), indices.end(), accindices.begin());
+        accindices.back() = index;
+        return accessor->access_by_array(accindices);
+    }
 };
 template<size_t s1, size_t... sr>
 struct index_mapper_type_finder{using type = compiletime_index_mapper<s1, sr...>;};
@@ -245,6 +275,7 @@ template<typename T,typename allocator, bool compile_time, size_t... number_of_e
 struct multi_array_impl{
     static_assert(compile_time || (sizeof...(number_of_extends_or_extent_list) == 1));
 #endif
+    using value_type = T;
     typename index_mapper_type_finder<number_of_extends_or_extent_list...>::type m_im;
     constexpr static size_t m_dims = decltype(m_im)::nDims();
     plain_vector<T, allocator, compile_time ? product(number_of_extends_or_extent_list...) : ~0ull> m_data;
@@ -278,7 +309,16 @@ struct multi_array_impl{
     }
     
     access_ref<multi_array_impl<T, allocator, number_of_extends_or_extent_list...>, 1, m_dims - 1> operator[](size_t index){
-
+        access_ref<multi_array_impl<T, allocator, number_of_extends_or_extent_list...>, 1, m_dims - 1> ret;
+        ret.indices[0] = index;
+        ret.accessor = this;
+        return ret;
+    }
+    const_access_ref<multi_array_impl<T, allocator, number_of_extends_or_extent_list...>, 1, m_dims - 1> operator[](size_t index)const{
+        const_access_ref<multi_array_impl<T, allocator, number_of_extends_or_extent_list...>, 1, m_dims - 1> ret;
+        ret.indices[0] = index;
+        ret.accessor = this;
+        return ret;
     }
     
 };
