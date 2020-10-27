@@ -1,0 +1,10 @@
+
+cmake_minimum_required(VERSION 3.16)
+set(CMAKE_CXX_COMPILER g++-10)
+set(CMAKE_C_COMPILER gcc-10)
+set(CMAKE_CXX_STANDARD 20)
+project(multiarray)
+add_library(multi_array INTERFACE)
+target_include_directories(multi_array INTERFACE "${CMAKE_CURRENT_LIST_DIR}/include")
+add_executable(test "test.cpp")
+target_link_libraries(test multi_array)

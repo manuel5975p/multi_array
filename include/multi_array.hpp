@@ -14,7 +14,7 @@
 #include <type_traits>
 #include <tuple>
 #include <cassert>
-//#include <concepts>
+#include <concepts>
 template<typename T>
 struct aligned_allocator{
     using value_type = T;
@@ -302,7 +302,8 @@ struct multi_array_impl{
     plain_vector<T, allocator, compile_time ? product(number_of_extends_or_extent_list...) : ~0ull> m_data;
     template<typename... Ts>
     multi_array_impl(Ts... args) : m_im(args...){
-        if constexpr(!compile_time) m_data = decltype(m_data)(product(args...));
+        if constexpr (sizeof...(args) == 0);
+        else if constexpr(!compile_time) m_data = decltype(m_data)(product(args...));
     }
     #if DERIVE_TIMEDNESS_FROM_NUMBER_OF_TEMPLATE_ARGUMENTS
     multi_array_impl(const multi_array_impl<T, allocator, number_of_extends_or_extent_list...>& other) = default;
