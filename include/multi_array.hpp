@@ -26,7 +26,8 @@ struct aligned_allocator{
     using difference_type = std::ptrdiff_t;
     using propagate_on_container_move_assignment = std::false_type;
     T* allocate(size_type n){
-        return (T*)std::aligned_alloc(32, n * sizeof(T));
+        n *= sizeof(T);
+        return (T*)std::aligned_alloc(32, n + ((32 - (n % 32)) % 32));
     }
     void deallocate(T* p, size_type n){
         (void)n;
@@ -35,7 +36,7 @@ struct aligned_allocator{
 };
 constexpr size_t Dynamic = ~0ULL;
 template<typename T,typename allocator, size_t _size = Dynamic>
-struct plain_vector{
+struct alignas(32) plain_vector{
     std::array<T, _size> m_data;
     using iterator = typename               std::array<T, _size>::iterator;
     using const_iterator = typename         std::array<T, _size>::const_iterator;
@@ -52,6 +53,8 @@ struct plain_vector{
     auto cend   ()const{return m_data.cend   ();}
     auto crbegin()const{return m_data.crbegin();}
     auto crend  ()const{return m_data.crend  ();}
+    const T* data()const{return m_data.data  ();}
+    T* data          (){return m_data.data  ();}
 };
 template<typename T, typename allocator>
 struct plain_vector<T, allocator, Dynamic>{
@@ -74,6 +77,8 @@ struct plain_vector<T, allocator, Dynamic>{
     auto cend   ()const{return m_data.cend   ();}
     auto crbegin()const{return m_data.crbegin();}
     auto crend  ()const{return m_data.crend  ();}
+    const T* data()const{return m_data.data  ();}
+    T* data          (){return m_data.data  ();}
 };
 template<typename... Args>
 constexpr auto product(Args... args) { 
@@ -145,11 +150,19 @@ struct compiletime_index_mapper{
     }
 };
 template<size_t dims>
-struct runtime_index_mapper{
+struct alignas(32) runtime_index_mapper{
     std::array<size_t, dims> extents;
+    std::array<size_t, dims - 1> products;
+    
     template<typename... Ts>
     runtime_index_mapper(Ts... args) : extents{static_cast<size_t>(args)...}{
         static_assert(std::conjunction_v<std::is_integral<Ts>...>);
+        assert(reinterpret_cast<size_t>(extents.data()) % 32 == 0);
+        size_t product = std::accumulate(extents.begin(), extents.end(), 1, [](size_t x, size_t y){return x * y;});
+        auto ait = products.begin();
+        for(auto it = extents.begin();it != (extents.end() - 1);it++){
+            *(ait++) = (product /= *it);
+        }
     }
     runtime_index_mapper(const runtime_index_mapper<dims>&) = default;
     runtime_index_mapper(runtime_index_mapper<dims>&&) = default;
@@ -162,13 +175,21 @@ struct runtime_index_mapper{
         static_assert(sizeof...(arguments) == dims);
         static_assert(std::conjunction_v<std::is_integral<Ts>...>);
         std::array<size_t, dims> args{static_cast<size_t>(arguments)...};
-        size_t index = 0;
+        /*size_t index = 0;
         size_t product = std::accumulate(extents.begin(), extents.end(), 1, [](size_t x, size_t y){return x * y;});
         auto ait = args.begin();
         for(auto it = extents.begin();it != extents.end();it++){
             index += *(ait++) * (product /= *it);
+        }*/
+        size_t alt_index = 0;
+        auto pit = products.begin();
+        auto ait = args.begin();
+        for(auto it = extents.begin();it != (extents.end() - 1);it++){
+            alt_index += *(ait++) * *(pit++);
         }
-        return index;
+        alt_index += args.back();
+        //assert(index == alt_index && "New index calculation is shit");
+        return alt_index;
     }
     size_t access_by_array(const std::array<size_t, dims>& args)const{
         size_t index = 0;
@@ -307,7 +328,12 @@ struct multi_array_impl{
     constexpr size_t nDims()const{
         return m_dims;
     }
-    
+    const value_type* data()const{
+        return m_data.data();
+    }
+    value_type* data(){
+        return m_data.data();
+    }
     std::conditional_t<m_dims == 1,T&, access_ref<multi_array_impl<T, allocator, number_of_extends_or_extent_list...>, 1, m_dims - 1>> operator[](size_t index){
         if constexpr(m_dims == 1){
             return (m_data[index]);
@@ -332,25 +358,28 @@ struct multi_array_impl{
     }
     
 };
+#ifndef DEFAULT_ALLOCATOR
+#define DEFAULT_ALLOCATOR aligned_allocator
+#endif
 #if DERIVE_TIMEDNESS_FROM_NUMBER_OF_TEMPLATE_ARGUMENTS
 template<typename T, size_t... sizes>
 struct multi_array_selector{
-    using type = multi_array_impl<T, std::allocator<T>, sizes...>;
+    using type = multi_array_impl<T, DEFAULT_ALLOCATOR<T>, sizes...>;
 };
 template<typename T, size_t R>
 struct multi_array_selector<T, R>{
-    using type = multi_array_impl<T, std::allocator<T>, R>;
+    using type = multi_array_impl<T, DEFAULT_ALLOCATOR<T>, R>;
 };
 template<typename T, size_t... sizes>
 using multi_array = multi_array_selector<T, sizes...>::type;
 #else
 template<typename T, bool compiletime, size_t... sizes>
 struct multi_array_selector{
-    using type = multi_array_impl<T, std::allocator<T>, compiletime, sizes...>;
+    using type = multi_array_impl<T, DEFAULT_ALLOCATOR<T>, compiletime, sizes...>;
 };
 template<typename T, bool compiletime, size_t R>
 struct multi_array_selector<T, compiletime, R>{
-    using type = multi_array_impl<T,std::allocator<T>, compiletime,  R>;
+    using type = multi_array_impl<T,DEFAULT_ALLOCATOR<T>, compiletime,  R>;
 };
 template<typename T, bool compiletime, size_t... sizes>
 using multi_array = multi_array_selector<T, compiletime, sizes...>::type;
