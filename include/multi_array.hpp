@@ -308,17 +308,27 @@ struct multi_array_impl{
         return m_dims;
     }
     
-    access_ref<multi_array_impl<T, allocator, number_of_extends_or_extent_list...>, 1, m_dims - 1> operator[](size_t index){
-        access_ref<multi_array_impl<T, allocator, number_of_extends_or_extent_list...>, 1, m_dims - 1> ret;
-        ret.indices[0] = index;
-        ret.accessor = this;
-        return ret;
+    std::conditional_t<m_dims == 1,T&, access_ref<multi_array_impl<T, allocator, number_of_extends_or_extent_list...>, 1, m_dims - 1>> operator[](size_t index){
+        if constexpr(m_dims == 1){
+            return (m_data[index]);
+        }
+        else{
+            access_ref<multi_array_impl<T, allocator, number_of_extends_or_extent_list...>, 1, m_dims - 1> ret;
+            ret.indices[0] = index;
+            ret.accessor = this;
+            return ret;
+        }
     }
-    const_access_ref<multi_array_impl<T, allocator, number_of_extends_or_extent_list...>, 1, m_dims - 1> operator[](size_t index)const{
-        const_access_ref<multi_array_impl<T, allocator, number_of_extends_or_extent_list...>, 1, m_dims - 1> ret;
-        ret.indices[0] = index;
-        ret.accessor = this;
-        return ret;
+    std::conditional_t<m_dims == 1,const T&, const_access_ref<multi_array_impl<T, allocator, number_of_extends_or_extent_list...>, 1, m_dims - 1>> operator[](size_t index)const{
+        if constexpr(m_dims == 1){
+            return (m_data[index]);
+        }
+        else{
+            const_access_ref<multi_array_impl<T, allocator, number_of_extends_or_extent_list...>, 1, m_dims - 1> ret;
+            ret.indices[0] = index;
+            ret.accessor = this;
+            return ret;
+        }
     }
     
 };
