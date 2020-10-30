@@ -1,5 +1,4 @@
 #define DERIVE_TIMEDNESS_FROM_NUMBER_OF_TEMPLATE_ARGUMENTS 1
-#define DEFAULT_ALLOCATOR aligned_allocator
 #include <value_grid.hpp>
 #include <Eigen/Dense>
 void print_first(const multi_array<float, 3, 4, 5>& x){
@@ -17,14 +16,19 @@ int main(){
             }
         }
     }
-    x.m_im.enumerate_index_combinations([&x](std::array<size_t, 3> indices){std::cout << x(indices[0], indices[1], indices[2]) << ", ";});
-    
-    std::cout << "\n";
-    //print_first(x);
-    y[0][0][5] = 5;
-    std::cout << y[0][0][5] << "\n";
-    std::cout << x.nDims() << "\n";
-    std::cout << reinterpret_cast<size_t>(x.data()) % 32 << "\n";
-    multi_array <Eigen::Vector2d, 3> grid;
-    
+    //x.m_im.enumerate_index_combinations([&x](std::array<size_t, 3> indices){std::cout << x(indices[0], indices[1], indices[2]) << ", ";});
+    //
+    //std::cout << "\n";
+    ////print_first(x);
+    //y[0][0][5] = 5;
+    //std::cout << y[0][0][5] << "\n";
+    //std::cout << x.nDims() << "\n";
+    //std::cout << reinterpret_cast<size_t>(x.data()) % 32 << "\n";
+    value_grid<float, 8, 8, 8> grid;
+    value_grid<float, 8, 8, 8> grid2;
+    grid [0ul][0ul][0ul] = 5;
+    grid2[0ul][0ul][0ul] = 5;
+    grid = grid + grid2;
+    std::cout << grid(0ul,0ul,0ul) << "\n";
+    //grid.extent<2>();
 }

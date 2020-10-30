@@ -88,9 +88,13 @@ template<typename... Args>
 constexpr auto sum(Args... args) { 
     return (... + args); 
 }
+template<size_t n>
+struct failer{
+    static_assert(n > 5 && n < 5);
+};
 template<size_t args0, size_t... argrest>
 struct compiletime_index_mapper{
-    template<typename T, typename... Ts>
+    template<std::integral T, std::integral... Ts>
     size_t operator()(T argument, Ts... arguments)const{
         if constexpr(sizeof...(arguments) > 0){
             static_assert(std::is_integral_v<T>);
@@ -134,7 +138,27 @@ struct compiletime_index_mapper{
             f(args...);
         }
     }
-    template<std::invocable<std::array<size_t, sizeof...(argrest) + 1>> Function, size_t depth = 0, typename... Ts>
+    template<size_t stride, typename Function, typename Function2, size_t depth = 0, typename... Ts>
+    void enumerate_index_combinations_with_stride(Function f_chunk, Function2 f_single,  Ts... args){
+        if constexpr(depth < sizeof...(argrest)){
+            for(size_t i = 0;i < extent<depth>();i++){
+                enumerate_index_combinations_with_stride<stride, Function, Function2, depth + 1>(f_chunk, f_single, args..., i);
+            }
+        }
+        else if constexpr(depth < sizeof...(argrest) + 1){
+            for(size_t i = 0;i < (extent<depth>() - (extent<depth>() % stride));i += stride){
+                f_chunk(args..., i);
+            }
+            for(size_t i = (extent<depth>() - (extent<depth>() % stride));i < extent<depth>();i++){
+                f_single(args..., i);
+            }
+        }
+        else{
+            failer<depth> x;
+        }
+    }
+    /*template<std::invocable<std::array<size_t, sizeof...(argrest) + 1>> Function, size_t depth = 0, typename... Ts>
+            requires (std::invocable<Function, std::array<size_t, sizeof...(argrest) + 1>> && !std::invocable<Function, Ts...>)
     void enumerate_index_combinations(Function f, Ts... args){
         if constexpr(depth < sizeof...(argrest) + 1){
             for(size_t i = 0;i < extent<depth>();i++){
@@ -144,7 +168,7 @@ struct compiletime_index_mapper{
         else{
             f(std::array<size_t, sizeof...(argrest) + 1>{args...});
         }
-    }
+    }*/
     constexpr static size_t nDims(){
         return sizeof...(argrest) + 1;
     }
@@ -164,6 +188,7 @@ struct alignas(32) runtime_index_mapper{
             *(ait++) = (product /= *it);
         }
     }
+    runtime_index_mapper(){}
     runtime_index_mapper(const runtime_index_mapper<dims>&) = default;
     runtime_index_mapper(runtime_index_mapper<dims>&&) = default;
     runtime_index_mapper(const std::initializer_list<size_t>& _extents){
@@ -221,7 +246,27 @@ struct alignas(32) runtime_index_mapper{
             f(args...);
         }
     }
-    template<std::invocable<std::array<size_t, dims>> Function, size_t depth = 0, typename... Ts>
+    template<size_t stride, typename Function, typename Function2,  size_t depth = 0, typename... Ts>
+    void enumerate_index_combinations_with_stride(Function f_chunk, Function2 f_single,  Ts... args){
+        if constexpr(depth < (dims - 1)){
+            for(size_t i = 0;i < extent<depth>();i++){
+                enumerate_index_combinations_with_stride<stride, Function, Function2, depth + 1>(f_chunk,f_single, args..., i);
+            }
+        }
+        else if constexpr(depth < dims){
+            for(size_t i = 0;i < (extent<depth>() - (extent<depth>() % stride));i += stride){
+                f_chunk(args..., i);
+            }
+            for(size_t i = (extent<depth>() - (extent<depth>() % stride));i < extent<depth>();i++){
+                f_single(args..., i);
+            }
+        }
+        else{
+            failer<depth> x;
+        }
+    }
+    /*template<typename Function, size_t depth = 0, typename... Ts>
+        requires (std::invocable<Function, std::array<size_t, dims>> && !std::invocable<Function, Ts...>)
     void enumerate_index_combinations(Function f, Ts... args){
         if constexpr(depth < dims){
             for(size_t i = 0;i < extent<depth>();i++){
@@ -231,7 +276,7 @@ struct alignas(32) runtime_index_mapper{
         else{
             f(std::array<size_t, dims>{args...});
         }
-    }
+    }*/
     constexpr static size_t nDims(){
         return dims;
     }
@@ -240,7 +285,7 @@ template<typename marray, size_t codim, size_t dim>
 struct access_ref{
     marray* accessor;
     std::array<size_t, codim> indices;
-    access_ref<marray, codim + 1, dim - 1> operator[](size_t index){
+    access_ref<marray, codim + 1, dim - 1> operator[](size_t index)const{
         access_ref<marray, codim + 1, dim - 1> ret;
         std::copy(indices.begin(), indices.end(), ret.indices.begin());
         ret.indices.back() = index;
@@ -252,7 +297,7 @@ template<typename marray, size_t codim>
 struct access_ref<marray ,codim, 1>{
     marray* accessor;
     std::array<size_t, codim> indices;
-    marray::value_type& operator[](size_t index){
+    typename marray::value_type& operator[](size_t index)const{
         std::array<size_t, codim + 1> accindices;
         std::copy(indices.begin(), indices.end(), accindices.begin());
         accindices.back() = index;
@@ -263,7 +308,7 @@ template<typename marray, size_t codim, size_t dim>
 struct const_access_ref{
     const marray* accessor;
     std::array<size_t, codim> indices;
-    const_access_ref<marray, codim + 1, dim - 1> operator[](size_t index){
+    const_access_ref<marray, codim + 1, dim - 1> operator[](size_t index)const{
         const_access_ref<marray, codim + 1, dim - 1> ret;
         std::copy(indices.begin(), indices.end(), ret.indices.begin());
         ret.indices.back() = index;
@@ -275,7 +320,7 @@ template<typename marray, size_t codim>
 struct const_access_ref<marray ,codim, 1>{
     const marray* accessor;
     std::array<size_t, codim> indices;
-    const marray::value_type& operator[](size_t index){
+    const typename marray::value_type& operator[](size_t index)const{
         std::array<size_t, codim + 1> accindices;
         std::copy(indices.begin(), indices.end(), accindices.begin());
         accindices.back() = index;
@@ -329,13 +374,16 @@ struct multi_array_impl{
     constexpr size_t nDims()const{
         return m_dims;
     }
+    constexpr static size_t static_nDims(){
+        return m_dims;
+    }
     const value_type* data()const{
         return m_data.data();
     }
     value_type* data(){
         return m_data.data();
     }
-    std::conditional_t<m_dims == 1,T&, access_ref<multi_array_impl<T, allocator, number_of_extends_or_extent_list...>, 1, m_dims - 1>> operator[](size_t index){
+    std::conditional_t<m_dims == 1, T&, access_ref<multi_array_impl<T, allocator, number_of_extends_or_extent_list...>, 1, m_dims - 1>> operator[](size_t index){
         if constexpr(m_dims == 1){
             return (m_data[index]);
         }
@@ -346,7 +394,7 @@ struct multi_array_impl{
             return ret;
         }
     }
-    std::conditional_t<m_dims == 1,const T&, const_access_ref<multi_array_impl<T, allocator, number_of_extends_or_extent_list...>, 1, m_dims - 1>> operator[](size_t index)const{
+    std::conditional_t<m_dims == 1, const T&, const_access_ref<multi_array_impl<T, allocator, number_of_extends_or_extent_list...>, 1, m_dims - 1>> operator[](size_t index)const{
         if constexpr(m_dims == 1){
             return (m_data[index]);
         }
@@ -372,7 +420,7 @@ struct multi_array_selector<T, R>{
     using type = multi_array_impl<T, DEFAULT_ALLOCATOR<T>, R>;
 };
 template<typename T, size_t... sizes>
-using multi_array = multi_array_selector<T, sizes...>::type;
+using multi_array = typename multi_array_selector<T, sizes...>::type;
 #else
 template<typename T, bool compiletime, size_t... sizes>
 struct multi_array_selector{
